@@ -12,7 +12,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 
 
 // Create the socket connection
-const socket = io(process.env.REACT_APP_SOCKET_URL || 'https://api.urbanwealthcapitals.com/');
+const socket = io(process.env.REACT_APP_SOCKET_URL || 'https://api.urbanwealthcapitals.com');
 
 function ChatInterface() {
   const [messages, setMessages] = useState([]);
@@ -41,12 +41,12 @@ function ChatInterface() {
     setIsLoading(true);
     try {
       // Try the GET endpoint first
- let response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat/history/${uid}`);
+ let response = await fetch(`${process.env.REACT_APP_API_URL}api/chat/history/${uid}`);
       
       // If GET fails, try the POST endpoint
       if (!response.ok) {
         console.log('GET request failed, trying POST...');
-        response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat/history`, {
+        response = await fetch(`${process.env.REACT_APP_API_URL}api/chat/history`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -254,7 +254,7 @@ function ChatInterface() {
     console.log('Sending message request with file:', selectedFile?.name);
 
     try {
- const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat`, {
+ const response = await fetch(`${process.env.REACT_APP_API_URL}api/chat`, {
         method: 'POST',
         body: formData
       });
