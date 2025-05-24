@@ -3,7 +3,10 @@
       {
         "source": "/api/:path*",
         "destination": "https://api.urbanwealthcapitals.com/api/:path*"
+      },
+      {
+        "source": "/socket.io/:path*",
+        "destination": "https://api.urbanwealthcapitals.com/socket.io/:path*"
       }
     ]
   }
-  
