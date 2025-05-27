@@ -6,11 +6,67 @@ import CloseIcon from "@mui/icons-material/Close";
 import PersonIcon from "@mui/icons-material/Person";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import { useCallback } from "react";
+import heic2any from "heic2any";
 
 // https://chat.urbanwealthcapitals.com/?userId=4&username=steevz
 
 // Create the socket connection
 const socket = io("/api");
+
+// Component to handle image display with HEIC conversion
+function ImageDisplay({ file, onImageClick, convertHeicIfNeeded }) {
+  const [imageSrc, setImageSrc] = useState(file.data);
+  const [isConverting, setIsConverting] = useState(false);
+
+  useEffect(() => {
+    const convertImage = async () => {
+      if (file.name?.toLowerCase().match(/\.(heic|heif)$/)) {
+        setIsConverting(true);
+        try {
+          const convertedSrc = await convertHeicIfNeeded(file.data, file.name);
+          setImageSrc(convertedSrc);
+        } catch (error) {
+          console.error("Failed to convert HEIC:", error);
+        } finally {
+          setIsConverting(false);
+        }
+      }
+    };
+
+    convertImage();
+  }, [file.data, file.name, convertHeicIfNeeded]);
+
+  if (isConverting) {
+    return (
+      <div className="image-container">
+        <div className="image-converting">
+          <div className="converting-spinner"></div>
+          <span>Converting HEIC image...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="image-container">
+      <img
+        src={imageSrc}
+        alt={file.name}
+        className="message-image"
+        onClick={() => onImageClick(imageSrc, file.name)}
+      />
+      <div className="image-download">
+        <a
+          href={file.data}
+          download={file.name}
+          className="download-link"
+        >
+          Download
+        </a>
+      </div>
+    </div>
+  );
+}
 
 function ChatInterface() {
   const [messages, setMessages] = useState([]);
@@ -20,6 +76,7 @@ function ChatInterface() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -341,6 +398,52 @@ function ChatInterface() {
     }
   };
 
+  const openImagePreview = (imageSrc, imageName) => {
+    setImagePreview({ src: imageSrc, name: imageName });
+  };
+
+  const closeImagePreview = () => {
+    setImagePreview(null);
+  };
+
+  // Function to check if file is an image (including HEIC)
+  const isImageFile = (file) => {
+    if (!file || !file.type) return false;
+    return file.type.startsWith("image/") || 
+           file.name?.toLowerCase().endsWith('.heic') || 
+           file.name?.toLowerCase().endsWith('.heif');
+  };
+
+  // Function to convert HEIC to displayable format
+  const convertHeicIfNeeded = async (fileData, fileName) => {
+    if (!fileName?.toLowerCase().match(/\.(heic|heif)$/)) {
+      return fileData; // Not a HEIC file, return as is
+    }
+
+    try {
+      // Convert data URL to blob
+      const response = await fetch(fileData);
+      const blob = await response.blob();
+      
+      // Convert HEIC to JPEG
+      const convertedBlob = await heic2any({
+        blob: blob,
+        toType: "image/jpeg",
+        quality: 0.8
+      });
+
+      // Convert back to data URL
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(convertedBlob);
+      });
+    } catch (error) {
+      console.error("Error converting HEIC file:", error);
+      return fileData; // Return original if conversion fails
+    }
+  };
+
   return (
     <div className="chat-container">
       <div className="chat-header">
@@ -417,27 +520,12 @@ function ChatInterface() {
 
                         {message.file && (
                           <div className="message-attachment">
-                            {message.file.type &&
-                            message.file.type.startsWith("image/") ? (
-                              <div className="image-container">
-                                <img
-                                  src={message.file.data}
-                                  alt={message.file.name}
-                                  className="message-image"
-                                  onClick={() =>
-                                    window.open(message.file.data, "_blank")
-                                  }
-                                />
-                                <div className="image-download">
-                                  <a
-                                    href={message.file.data}
-                                    download={message.file.name}
-                                    className="download-link"
-                                  >
-                                    Download
-                                  </a>
-                                </div>
-                              </div>
+                            {isImageFile(message.file) ? (
+                              <ImageDisplay 
+                                file={message.file}
+                                onImageClick={openImagePreview}
+                                convertHeicIfNeeded={convertHeicIfNeeded}
+                              />
                             ) : null}
                           </div>
                         )}
@@ -530,6 +618,36 @@ function ChatInterface() {
           </div>
         </form>
       </div>
+
+      {/* Image Preview Modal */}
+      {imagePreview && (
+        <div className="image-modal-overlay" onClick={closeImagePreview}>
+          <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="image-modal-header">
+              <span className="image-modal-title">{imagePreview.name}</span>
+              <button className="image-modal-close" onClick={closeImagePreview}>
+                <CloseIcon />
+              </button>
+            </div>
+            <div className="image-modal-body">
+              <img 
+                src={imagePreview.src} 
+                alt={imagePreview.name}
+                className="image-modal-img"
+              />
+            </div>
+            <div className="image-modal-footer">
+              <a
+                href={imagePreview.src}
+                download={imagePreview.name}
+                className="image-modal-download"
+              >
+                Download Original
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .chat-container {
@@ -1012,6 +1130,26 @@ function ChatInterface() {
           animation: spin 0.8s linear infinite;
         }
 
+        .image-converting {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 40px 20px;
+          color: #a9a6b0;
+          font-size: 0.9em;
+        }
+
+        .converting-spinner {
+          width: 30px;
+          height: 30px;
+          border: 3px solid rgba(56, 189, 248, 0.1);
+          border-top: 3px solid #38bdf8;
+          border-radius: 50%;
+          margin-bottom: 12px;
+          animation: spin 1s linear infinite;
+        }
+
         @keyframes spin {
           0% {
             transform: rotate(0deg);
@@ -1064,6 +1202,120 @@ function ChatInterface() {
           color: #a9a6b0;
           font-size: 1.1em;
           line-height: 1.6;
+        }
+
+        /* Image Preview Modal Styles */
+        .image-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.9);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          animation: fadeIn 0.3s ease-out;
+        }
+
+        .image-modal-content {
+          background: #1e1a24;
+          border-radius: 12px;
+          max-width: 90vw;
+          max-height: 90vh;
+          overflow: hidden;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          animation: scaleIn 0.3s ease-out;
+        }
+
+        .image-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          background: linear-gradient(135deg, #2563eb, #3b82f6);
+          color: white;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .image-modal-title {
+          font-weight: 600;
+          font-size: 1.1em;
+          margin-right: 20px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .image-modal-close {
+          background: rgba(255, 255, 255, 0.1);
+          border: none;
+          color: white;
+          padding: 8px;
+          border-radius: 8px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.2s ease;
+          flex-shrink: 0;
+        }
+
+        .image-modal-close:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .image-modal-body {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          max-height: 70vh;
+          overflow: auto;
+        }
+
+        .image-modal-img {
+          max-width: 100%;
+          max-height: 100%;
+          border-radius: 8px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .image-modal-footer {
+          padding: 16px 20px;
+          background: rgba(255, 255, 255, 0.05);
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          text-align: center;
+        }
+
+        .image-modal-download {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 20px;
+          background: linear-gradient(135deg, #38bdf8, #0284c7);
+          color: white;
+          text-decoration: none;
+          border-radius: 8px;
+          font-weight: 500;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .image-modal-download:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(56, 189, 248, 0.3);
+        }
+
+        @keyframes scaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.9);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
         }
 
         @media (max-width: 768px) {
@@ -1125,6 +1377,28 @@ function ChatInterface() {
 
           .message-image {
             max-height: 200px;
+          }
+
+          .image-modal-content {
+            max-width: 95vw;
+            max-height: 95vh;
+          }
+
+          .image-modal-header {
+            padding: 12px 16px;
+          }
+
+          .image-modal-title {
+            font-size: 1em;
+          }
+
+          .image-modal-body {
+            padding: 16px;
+            max-height: 60vh;
+          }
+
+          .image-modal-footer {
+            padding: 12px 16px;
           }
 
           .chat-input-area {
