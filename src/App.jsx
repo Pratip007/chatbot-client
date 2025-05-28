@@ -1,7 +1,15 @@
 import React from 'react';
 import ChatInterface from './components/ChatInterface';
+import ConnectionTest from './components/ConnectionTest';
 
 function App() {
+  // Show connection test first, then chat interface
+  const showConnectionTest = new URLSearchParams(window.location.search).get('test') === 'true';
+  
+  if (showConnectionTest) {
+    return <ConnectionTest />;
+  }
+  
   return <ChatInterface />;
 }
 
