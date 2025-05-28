@@ -7,11 +7,15 @@ import PersonIcon from "@mui/icons-material/Person";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import { useCallback } from "react";
 import heic2any from "heic2any";
+import { API_URL, SOCKET_URL, MOCK_MODE } from "./config";
 
 // https://chat.urbanwealthcapitals.com/?userId=4&username=steevz
 
-// Create the socket connection
-const socket = io("/api");
+// Create the socket connection only if not in mock mode
+const socket = MOCK_MODE ? null : io(SOCKET_URL, {
+  autoConnect: false,
+  timeout: 5000,
+});
 
 // Component to handle image display with HEIC conversion
 function ImageDisplay({ file, onImageClick, convertHeicIfNeeded }) {
@@ -91,25 +95,35 @@ function ChatInterface() {
     async (uid) => {
       if (!uid) return;
 
+      // In mock mode, return empty array
+      if (MOCK_MODE) {
+        console.log("Mock mode: Skipping chat history fetch");
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       try {
         // Try the GET endpoint first
-        let response = await fetch(`/api/chat/history/${uid}`);
+        let response = await fetch(`${API_URL}/chat/history/${uid}`, {
+          timeout: 5000,
+        });
 
         // If GET fails, try the POST endpoint
         if (!response.ok) {
           console.log("GET request failed, trying POST...");
-          response = await fetch(`/api/chat/history`, {
+          response = await fetch(`${API_URL}/api/chat/history`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ userId: uid }),
+            timeout: 5000,
           });
         }
 
         if (!response.ok) {
-          throw new Error("Failed to fetch chat history");
+          throw new Error(`HTTP ${response.status}: Failed to fetch chat history`);
         }
 
         const historyData = await response.json();
@@ -142,6 +156,7 @@ function ChatInterface() {
         setMessages(formattedMessages);
       } catch (error) {
         console.error("Error fetching chat history:", error);
+        console.log("Backend server might not be running. Please check your API configuration.");
       } finally {
         setIsLoading(false);
       }
@@ -162,6 +177,15 @@ function ChatInterface() {
       console.log("Username from sessionStorage:", usernames);
     }
 
+    // Skip socket setup in mock mode
+    if (MOCK_MODE || !socket) {
+      console.log("Mock mode or no socket: Skipping socket setup");
+      return;
+    }
+
+    // Connect socket
+    socket.connect();
+
     // Socket connection events
     socket.on("connect", () => {
       console.log("Socket connected:", socket.id);
@@ -172,6 +196,12 @@ function ChatInterface() {
         socket.emit("join", { userId: userIds });
         console.log("Joined room for user:", userIds);
       }
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+      console.log("Backend server might not be running. Please check your API configuration.");
+      setSocketConnected(false);
     });
 
     socket.on("joined", (data) => {
@@ -248,12 +278,16 @@ function ChatInterface() {
 
     // Cleanup
     return () => {
-      socket.off("connect");
-      socket.off("joined");
-      socket.off("disconnect");
-      socket.off("message");
-      socket.off("messageUpdated");
-      socket.off("messageDeleted");
+      if (socket) {
+        socket.off("connect");
+        socket.off("connect_error");
+        socket.off("joined");
+        socket.off("disconnect");
+        socket.off("message");
+        socket.off("messageUpdated");
+        socket.off("messageDeleted");
+        socket.disconnect();
+      }
     };
   }, [fetchChatHistory, userIds, username, usernames]);
 
@@ -263,7 +297,7 @@ function ChatInterface() {
       fetchChatHistory(userId);
 
       // Join user-specific room if socket is connected
-      if (socketConnected) {
+      if (socketConnected && socket) {
         socket.emit("join", { userId });
         console.log("Joined room for user:", userId);
       }
@@ -299,8 +333,46 @@ function ChatInterface() {
 
     console.log("Current username:", currentUsername);
 
+    // In mock mode, just add the message locally
+    if (MOCK_MODE) {
+      console.log("Mock mode: Adding message locally");
+      
+      const userMessage = {
+        id: Date.now().toString(),
+        text: input,
+        isBot: false,
+        timestamp: new Date(),
+        username: currentUsername,
+        senderType: "user",
+        file: selectedFile
+          ? {
+              name: selectedFile.name,
+              type: selectedFile.type,
+              data: URL.createObjectURL(selectedFile),
+            }
+          : null,
+      };
+
+      const botMessage = {
+        id: (Date.now() + 1).toString(),
+        text: "This is a mock response. Please configure your backend server to get real responses.",
+        isBot: true,
+        timestamp: new Date(),
+        username: "Bot",
+        senderType: "bot",
+      };
+
+      setMessages((prev) => [...prev, userMessage, botMessage]);
+      setInput("");
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
     // For text-only messages, use WebSocket for instant delivery
-    if (input.trim() && !selectedFile && socketConnected) {
+    if (input.trim() && !selectedFile && socketConnected && socket) {
       console.log("Sending message via WebSocket");
 
       socket.emit("sendMessage", {
@@ -327,10 +399,15 @@ function ChatInterface() {
     console.log("Sending message request with file:", selectedFile?.name);
 
     try {
-      const response = await fetch(`/api/chat`, {
+      const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         body: formData,
+        timeout: 10000,
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
       const data = await response.json();
       console.log("Server response:", data);
@@ -395,6 +472,19 @@ function ChatInterface() {
       }
     } catch (error) {
       console.error("Error sending message:", error);
+      console.log("Backend server might not be running. Please check your API configuration.");
+      
+      // Show error message to user
+      const errorMessage = {
+        id: Date.now().toString(),
+        text: "❌ Failed to send message. Please check if the backend server is running.",
+        isBot: true,
+        timestamp: new Date(),
+        username: "System",
+        senderType: "bot",
+      };
+      
+      setMessages((prev) => [...prev, errorMessage]);
     }
   };
 
