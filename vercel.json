@@ -5,6 +5,14 @@
         "destination": "https://api.urbanwealthcapitals.com/api/:path*"
       },
       {
+        "source": "/chat",
+        "destination": "https://api.urbanwealthcapitals.com/chat"
+      },
+      {
+        "source": "/user",
+        "destination": "https://api.urbanwealthcapitals.com/user"
+      },
+      {
         "source": "/socket.io/:path*",
         "destination": "https://api.urbanwealthcapitals.com/socket.io/:path*"
       }
