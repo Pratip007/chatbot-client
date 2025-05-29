@@ -79,6 +79,7 @@ function ChatInterface() {
   const [username, setUsername] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
@@ -90,6 +91,40 @@ function ChatInterface() {
   console.log("Read data from ", userIds, usernames);
 
   // Fetch chat history from the server
+
+  const createUser = useCallback(async (uid, uname) => {
+    if (!uid || !uname) return false;
+
+    // In mock mode, skip user creation
+    if (MOCK_MODE) {
+      console.log("Mock mode: Skipping user creation");
+      return true;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/user`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          userId: uid, 
+          username: uname 
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to create user`);
+      }
+
+      const userData = await response.json();
+      console.log("User created/retrieved:", userData);
+      return true;
+    } catch (error) {
+      console.error("Error creating user:", error);
+      return false;
+    }
+  }, []);
 
   const fetchChatHistory = useCallback(
     async (uid) => {
@@ -325,6 +360,7 @@ function ChatInterface() {
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim() && !selectedFile) return;
+    if (isUploading) return; // Prevent multiple uploads
 
     // Get latest userId from sessionStorage in case it was updated
     // const userData = JSON.parse(sessionStorage.getItem('userData') || '{}');
@@ -332,6 +368,31 @@ function ChatInterface() {
     const currentUsername = usernames || username;
 
     console.log("Current username:", currentUsername);
+
+    // Set uploading state if there's a file
+    if (selectedFile) {
+      setIsUploading(true);
+      console.log(`Starting upload of file: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)}MB)`);
+    }
+
+    // Ensure user exists before sending message
+    if (!MOCK_MODE && currentUserId && currentUsername) {
+      const userCreated = await createUser(currentUserId, currentUsername);
+      if (!userCreated) {
+        console.error("Failed to create user, cannot send message");
+        setIsUploading(false);
+        const errorMessage = {
+          id: Date.now().toString(),
+          text: "❌ Failed to initialize user. Please refresh the page and try again.",
+          isBot: true,
+          timestamp: new Date(),
+          username: "System",
+          senderType: "bot",
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        return;
+      }
+    }
 
     // In mock mode, just add the message locally
     if (MOCK_MODE) {
@@ -368,6 +429,7 @@ function ChatInterface() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      setIsUploading(false); // Reset uploading state
       return;
     }
 
@@ -402,7 +464,6 @@ function ChatInterface() {
       const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         body: formData,
-        timeout: 10000,
       });
 
       if (!response.ok) {
@@ -470,9 +531,12 @@ function ChatInterface() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      setIsUploading(false); // Reset uploading state
     } catch (error) {
       console.error("Error sending message:", error);
       console.log("Backend server might not be running. Please check your API configuration.");
+      
+      setIsUploading(false); // Reset uploading state on error
       
       // Show error message to user
       const errorMessage = {
@@ -655,11 +719,15 @@ function ChatInterface() {
                 <div className="file-info">
                   <div className="file-icon">📎</div>
                   <span className="file-name">{selectedFile.name}</span>
+                  {isUploading && (
+                    <span className="upload-status">Uploading...</span>
+                  )}
                 </div>
                 <button
                   type="button"
                   className="remove-file-button"
                   onClick={removeSelectedFile}
+                  disabled={isUploading}
                 >
                   <CloseIcon fontSize="small" />
                 </button>
@@ -697,9 +765,9 @@ function ChatInterface() {
             <button
               type="submit"
               className="send-button"
-              disabled={(!input.trim() && !selectedFile) || isLoading}
+              disabled={(!input.trim() && !selectedFile) || isLoading || isUploading}
             >
-              {isLoading ? (
+              {isLoading || isUploading ? (
                 <div className="sending-spinner"></div>
               ) : (
                 <SendIcon />
@@ -1101,6 +1169,13 @@ function ChatInterface() {
           overflow: hidden;
           text-overflow: ellipsis;
           max-width: 300px;
+        }
+
+        .upload-status {
+          font-size: 0.8em;
+          color: #38bdf8;
+          margin-left: 8px;
+          font-style: italic;
         }
 
         .remove-file-button {
