@@ -79,7 +79,6 @@ function ChatInterface() {
   const [username, setUsername] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
@@ -91,40 +90,6 @@ function ChatInterface() {
   console.log("Read data from ", userIds, usernames);
 
   // Fetch chat history from the server
-
-  const createUser = useCallback(async (uid, uname) => {
-    if (!uid || !uname) return false;
-
-    // In mock mode, skip user creation
-    if (MOCK_MODE) {
-      console.log("Mock mode: Skipping user creation");
-      return true;
-    }
-
-    try {
-      const response = await fetch(`${API_URL}/api/user`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          userId: uid, 
-          username: uname 
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Failed to create user`);
-      }
-
-      const userData = await response.json();
-      console.log("User created/retrieved:", userData);
-      return true;
-    } catch (error) {
-      console.error("Error creating user:", error);
-      return false;
-    }
-  }, []);
 
   const fetchChatHistory = useCallback(
     async (uid) => {
@@ -360,7 +325,6 @@ function ChatInterface() {
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim() && !selectedFile) return;
-    if (isUploading) return; // Prevent multiple uploads
 
     // Get latest userId from sessionStorage in case it was updated
     // const userData = JSON.parse(sessionStorage.getItem('userData') || '{}');
@@ -368,31 +332,6 @@ function ChatInterface() {
     const currentUsername = usernames || username;
 
     console.log("Current username:", currentUsername);
-
-    // Set uploading state if there's a file
-    if (selectedFile) {
-      setIsUploading(true);
-      console.log(`Starting upload of file: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)}MB)`);
-    }
-
-    // Ensure user exists before sending message
-    if (!MOCK_MODE && currentUserId && currentUsername) {
-      const userCreated = await createUser(currentUserId, currentUsername);
-      if (!userCreated) {
-        console.error("Failed to create user, cannot send message");
-        setIsUploading(false);
-        const errorMessage = {
-          id: Date.now().toString(),
-          text: "❌ Failed to initialize user. Please refresh the page and try again.",
-          isBot: true,
-          timestamp: new Date(),
-          username: "System",
-          senderType: "bot",
-        };
-        setMessages((prev) => [...prev, errorMessage]);
-        return;
-      }
-    }
 
     // In mock mode, just add the message locally
     if (MOCK_MODE) {
@@ -429,7 +368,6 @@ function ChatInterface() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-      setIsUploading(false); // Reset uploading state
       return;
     }
 
@@ -464,6 +402,7 @@ function ChatInterface() {
       const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         body: formData,
+        timeout: 10000,
       });
 
       if (!response.ok) {
@@ -531,12 +470,9 @@ function ChatInterface() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-      setIsUploading(false); // Reset uploading state
     } catch (error) {
       console.error("Error sending message:", error);
       console.log("Backend server might not be running. Please check your API configuration.");
-      
-      setIsUploading(false); // Reset uploading state on error
       
       // Show error message to user
       const errorMessage = {
@@ -603,12 +539,21 @@ function ChatInterface() {
       <div className="chat-header">
         <div className="header-content">
           <div className="logo-container">
-            <span className="header-icon">💬</span>
-            <h1 className="header-title">Customer Support</h1>
+            <img 
+              src="/cortex-logo.png" 
+              alt="Cortex AI Logo" 
+              className="header-logo"
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.nextElementSibling.style.display = 'inline';
+              }}
+            />
+            
+            <p className="header-title">Cortex AI assistant</p>
           </div>
           <div className="user-container">
             <span className="user-info">
-              <PersonIcon fontSize="small" className="user-icon" />
+             
               <span className="username">{username || "Guest"}</span>
             </span>
           </div>
@@ -629,7 +574,7 @@ function ChatInterface() {
                   style={{ fontSize: "3.5rem", color: "#3b82f6" }}
                 />
               </div>
-              <h2>Welcome to Customer Support</h2>
+              <h2>Welcome to Cortex AI assistant</h2>
               <p>Send a message to start chatting with our support team.</p>
             </div>
           </div>
@@ -719,15 +664,11 @@ function ChatInterface() {
                 <div className="file-info">
                   <div className="file-icon">📎</div>
                   <span className="file-name">{selectedFile.name}</span>
-                  {isUploading && (
-                    <span className="upload-status">Uploading...</span>
-                  )}
                 </div>
                 <button
                   type="button"
                   className="remove-file-button"
                   onClick={removeSelectedFile}
-                  disabled={isUploading}
                 >
                   <CloseIcon fontSize="small" />
                 </button>
@@ -765,9 +706,9 @@ function ChatInterface() {
             <button
               type="submit"
               className="send-button"
-              disabled={(!input.trim() && !selectedFile) || isLoading || isUploading}
+              disabled={(!input.trim() && !selectedFile) || isLoading}
             >
-              {isLoading || isUploading ? (
+              {isLoading ? (
                 <div className="sending-spinner"></div>
               ) : (
                 <SendIcon />
@@ -848,21 +789,29 @@ function ChatInterface() {
         .logo-container {
           display: flex;
           align-items: center;
-          background: rgba(255, 255, 255, 0.5);
-          padding: 8px 15px;
-          border-radius: 20px;
-          box-shadow: 0 2px 10px rgba(56, 189, 248, 0.12);
-          border: 1px solid rgba(186, 230, 253, 0.5);
+          background: transparent;
+          padding: 0;
+          margin: 0;
+          border-radius: 0;
+          box-shadow: none;
+          border: none;
+        }
+
+        .header-logo {
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          object-fit: cover;
         }
 
         .header-icon {
-          font-size: 24px;
+          font-size: 1.8em;
           margin-right: 10px;
           color: #0284c7;
         }
 
         .header-title {
-          font-size: 20px;
+          font-size: 1.1em;
           font-weight: 600;
           background: linear-gradient(to right, #0c4a6e, #0369a1);
           -webkit-background-clip: text;
@@ -1169,13 +1118,6 @@ function ChatInterface() {
           overflow: hidden;
           text-overflow: ellipsis;
           max-width: 300px;
-        }
-
-        .upload-status {
-          font-size: 0.8em;
-          color: #38bdf8;
-          margin-left: 8px;
-          font-style: italic;
         }
 
         .remove-file-button {
@@ -1501,11 +1443,16 @@ function ChatInterface() {
           }
 
           .header-icon {
-            font-size: 1.8em;
+            font-size: 1.5em;
+          }
+
+          .header-logo {
+            width: 40px;
+            height: 40px;
           }
 
           .header-title {
-            font-size: 1.5em;
+            font-size: 1em;
           }
 
           .user-info {
@@ -1597,8 +1544,13 @@ function ChatInterface() {
             font-size: 1.5em;
           }
 
+          .header-logo {
+            width: 40px;
+            height: 40px;
+          }
+
           .header-title {
-            font-size: 1.3em;
+            font-size: 0.8em;
           }
 
           .user-info {
