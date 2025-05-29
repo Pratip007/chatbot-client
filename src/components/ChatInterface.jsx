@@ -311,6 +311,30 @@ function ChatInterface() {
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
     if (file) {
+      // Check file size (1MB = 1024 * 1024 bytes)
+      const maxSizeInBytes = 1024 * 1024; // 1MB
+      
+      if (file.size > maxSizeInBytes) {
+        // Show error message for file too large
+        const fileSizeInMB = (file.size / (1024 * 1024)).toFixed(2);
+        const errorMessage = {
+          id: Date.now().toString(),
+          text: `❌ File "${file.name}" is too large (${fileSizeInMB}MB). Maximum file size allowed is 1MB. Please choose a smaller file.`,
+          isBot: true,
+          timestamp: new Date(),
+          username: "System",
+          senderType: "bot",
+        };
+        
+        setMessages((prev) => [...prev, errorMessage]);
+        
+        // Clear the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+      
       setSelectedFile(file);
     }
   };
@@ -682,6 +706,7 @@ function ChatInterface() {
               className="attach-button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
+              title="Attach file (Max size: 1MB)"
             >
               <AttachFileIcon />
             </button>
@@ -715,6 +740,8 @@ function ChatInterface() {
               )}
             </button>
           </div>
+          
+          
         </form>
       </div>
 
@@ -1625,6 +1652,18 @@ function ChatInterface() {
           .welcome-message p {
             font-size: 1em;
           }
+        }
+
+        .file-size-info {
+          text-align: center;
+          margin-top: 8px;
+          padding: 4px 0;
+        }
+
+        .file-size-text {
+          font-size: 0.75em;
+          color: #a9a6b0;
+          opacity: 0.8;
         }
       `}</style>
     </div>
