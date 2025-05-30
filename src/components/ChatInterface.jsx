@@ -575,12 +575,12 @@ function ChatInterface() {
             
             <p className="header-title">Cortex AI assistant</p>
           </div>
-          <div className="user-container">
+          {/* <div className="user-container">
             <span className="user-info">
              
               <span className="username">{username || "Guest"}</span>
-            </span>
-          </div>
+            </span> 
+          </div> */}
         </div>
       </div>
 
@@ -1479,7 +1479,7 @@ function ChatInterface() {
           }
 
           .header-title {
-            font-size: 1em;
+            font-size: 1.2em;
           }
 
           .user-info {
@@ -1577,7 +1577,7 @@ function ChatInterface() {
           }
 
           .header-title {
-            font-size: 0.8em;
+            font-size: 1.2em;
           }
 
           .user-info {
