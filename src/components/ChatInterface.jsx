@@ -787,6 +787,11 @@ function ChatInterface() {
           overflow: hidden;
           box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
           background: #07030c;
+          font-family: 'Refarrels', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        .chat-container * {
+          font-family: inherit;
         }
 
         .chat-header {
@@ -1005,6 +1010,7 @@ function ChatInterface() {
           font-size: 1.05em;
           line-height: 1.5;
           word-break: break-word;
+          white-space: pre-line;
         }
 
         .message-meta {
